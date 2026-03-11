@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Podcast Insights Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.3); }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; opacity: 0; }
+  .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(135deg, #ef4444, #e11d48);
+    cursor: pointer; border: 2px solid rgba(255,255,255,0.2);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(135deg, #ef4444, #e11d48);
+    cursor: pointer; border: 2px solid rgba(255,255,255,0.2);
+  }
+</style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-neutral-950 to-stone-950 text-slate-200 font-sans">
+
+<div class="max-w-5xl mx-auto px-4 py-8">
+
+  <!-- Header -->
+  <div class="text-center mb-8">
+    <h1 class="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-red-400 via-rose-400 to-red-500 bg-clip-text text-transparent mb-2">
+      YouTube Podcast Insights Agent
+    </h1>
+    <p class="text-slate-400 text-sm">
+      Durable AI pipeline powered by
+      <span class="text-red-400 font-semibold">Temporal</span> +
+      <span class="text-rose-400 font-semibold">Gemini</span> +
+      <span class="text-red-300 font-semibold">YouTube Data API</span>
+    </p>
+  </div>
+
+  <!-- Compact Form Card -->
+  <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 sm:p-6 mb-6">
+    <form id="form">
+      <!-- Row 1: Channel + Interests side by side -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label for="query" class="block text-xs text-slate-400 mb-1">Channel Name or Keywords</label>
+          <input id="query" type="text" placeholder="e.g. Lex Fridman, Fireship" required
+            class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/30 transition">
+        </div>
+        <div>
+          <label for="interests" class="block text-xs text-slate-400 mb-1">Your Interests</label>
+          <input id="interests" type="text" placeholder="e.g. distributed systems, AI agents" required
+            class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/30 transition">
+        </div>
+      </div>
+      <!-- Row 2: Slider + Button side by side -->
+      <div class="flex items-end gap-4">
+        <div class="flex-1">
+          <label for="max-videos" class="block text-xs text-slate-400 mb-1">
+            Max Videos: <span id="slider-value" class="text-red-400 font-semibold">10</span>
+          </label>
+          <input id="max-videos" type="range" min="3" max="50" value="10"
+            class="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer">
+        </div>
+        <button type="submit" id="btn"
+          class="px-8 py-2 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap">
+          Analyze Channel
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Error -->
+  <div id="error" class="hidden mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm"></div>
+
+  <!-- Pipeline Progress -->
+  <div id="progress" class="hidden mb-6">
+    <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 sm:p-6">
+      <div id="pipeline" class="flex items-center justify-between mb-3"></div>
+      <div class="text-center">
+        <p id="phase-text" class="text-slate-300 font-medium text-sm">Starting...</p>
+        <p id="detail-text" class="text-slate-500 text-xs mt-1"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skeleton Loading -->
+  <div id="skeleton" class="hidden space-y-5">
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+      <div class="lg:col-span-3 bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div class="h-1 skeleton"></div>
+        <div class="p-5 space-y-3">
+          <div class="h-5 w-1/3 rounded skeleton"></div>
+          <div class="h-3 w-full rounded skeleton"></div>
+          <div class="h-3 w-4/5 rounded skeleton"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2 bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div class="h-1 skeleton"></div>
+        <div class="p-5 space-y-3">
+          <div class="h-4 w-1/2 rounded skeleton"></div>
+          <div class="h-3 w-full rounded skeleton"></div>
+          <div class="h-3 w-3/4 rounded skeleton"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="h-3 w-32 rounded skeleton mb-3"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+          <div class="aspect-video skeleton"></div>
+          <div class="p-3 space-y-2"><div class="h-4 w-3/4 rounded skeleton"></div><div class="h-3 w-full rounded skeleton"></div></div>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+          <div class="aspect-video skeleton"></div>
+          <div class="p-3 space-y-2"><div class="h-4 w-3/4 rounded skeleton"></div><div class="h-3 w-full rounded skeleton"></div></div>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl overflow-hidden hidden lg:block">
+          <div class="aspect-video skeleton"></div>
+          <div class="p-3 space-y-2"><div class="h-4 w-3/4 rounded skeleton"></div><div class="h-3 w-full rounded skeleton"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results" class="hidden space-y-5">
+
+    <!-- Summary + Key Insights: side by side -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5 animate-fade-in-up" style="animation-delay: 0s">
+      <!-- Summary (3/5 width) -->
+      <div class="lg:col-span-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
+        <div class="h-1 bg-gradient-to-r from-red-500 to-rose-600"></div>
+        <div id="summary" class="p-5"></div>
+      </div>
+
+      <!-- Key Insights (2/5 width) -->
+      <div id="insights-wrapper" class="hidden lg:col-span-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden">
+        <div class="h-1 bg-gradient-to-r from-amber-500 to-yellow-500"></div>
+        <div id="insights" class="p-5"></div>
+      </div>
+    </div>
+
+    <!-- Video Cards -->
+    <div class="animate-fade-in-up" style="animation-delay: 0.15s">
+      <h3 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Top Recommendations</h3>
+      <div id="cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="flex justify-center gap-6 mt-8 text-xs">
+    <span class="text-slate-600">Powered by Temporal · Gemini · YouTube Data API</span>
+    <a href="http://localhost:8233" target="_blank" class="text-red-400 hover:text-red-300 transition">Temporal UI</a>
+    <a href="/docs" target="_blank" class="text-red-400 hover:text-red-300 transition">API Docs</a>
+    <a href="/health" target="_blank" class="text-red-400 hover:text-red-300 transition">Health</a>
+  </div>
+
+</div>
+
+<script>
+const PHASES = [
+  { key: 'searching', label: 'Search', icon: `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>` },
+  { key: 'parsing', label: 'Parse', icon: `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z"/></svg>` },
+  { key: 'ranking_summarizing', label: 'Rank & Summarize', icon: `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01z"/></svg>` },
+];
+
+const MAX_POLLS = 200;
+
+const form = document.getElementById('form');
+const btn = document.getElementById('btn');
+const progress = document.getElementById('progress');
+const phaseText = document.getElementById('phase-text');
+const detailText = document.getElementById('detail-text');
+const results = document.getElementById('results');
+const summary = document.getElementById('summary');
+const insights = document.getElementById('insights');
+const insightsWrapper = document.getElementById('insights-wrapper');
+const cards = document.getElementById('cards');
+const errorEl = document.getElementById('error');
+const pipelineEl = document.getElementById('pipeline');
+const skeleton = document.getElementById('skeleton');
+const slider = document.getElementById('max-videos');
+const sliderValue = document.getElementById('slider-value');
+
+slider.addEventListener('input', () => { sliderValue.textContent = slider.value; });
+
+function buildPipeline() {
+  pipelineEl.innerHTML = PHASES.map((p, i) => `
+    <div class="flex flex-col items-center flex-1">
+      <div id="step-circle-${i}" class="w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 border-white/20 bg-white/5 text-slate-500">
+        ${p.icon}
+      </div>
+      <span id="step-label-${i}" class="text-xs mt-2 transition-all duration-300 text-slate-500">${p.label}</span>
+    </div>
+    ${i < PHASES.length - 1 ? `<div id="step-line-${i}" class="flex-1 h-0.5 self-center mb-5 rounded-full transition-all duration-500 bg-white/10"></div>` : ''}
+  `).join('');
+}
+
+function updatePipeline(phase) {
+  const idx = PHASES.findIndex(p => p.key === phase);
+  PHASES.forEach((_, i) => {
+    const circle = document.getElementById(`step-circle-${i}`);
+    const label = document.getElementById(`step-label-${i}`);
+    const line = i < PHASES.length - 1 ? document.getElementById(`step-line-${i}`) : null;
+
+    if (i < idx) {
+      circle.className = 'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 border-emerald-500 bg-emerald-500/20 text-emerald-400';
+      label.className = 'text-xs mt-2 transition-all duration-300 text-emerald-400';
+      if (line) line.className = 'flex-1 h-0.5 self-center mb-5 rounded-full transition-all duration-500 bg-emerald-500';
+    } else if (i === idx) {
+      circle.className = 'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 border-red-500 bg-red-500/20 text-red-400 animate-pulse-glow';
+      label.className = 'text-xs mt-2 transition-all duration-300 text-red-400 font-semibold';
+    } else {
+      circle.className = 'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-300 border-white/20 bg-white/5 text-slate-500';
+      label.className = 'text-xs mt-2 transition-all duration-300 text-slate-500';
+      if (line) line.className = 'flex-1 h-0.5 self-center mb-5 rounded-full transition-all duration-500 bg-white/10';
+    }
+  });
+}
+
+function extractVideoId(url) {
+  const m = url && url.match(/[?&]v=([^&]+)/);
+  return m ? m[1] : null;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const query = document.getElementById('query').value.trim();
+  const interestsVal = document.getElementById('interests').value.trim();
+  if (!query || !interestsVal) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+  errorEl.classList.add('hidden');
+  results.classList.add('hidden');
+  skeleton.classList.remove('hidden');
+  progress.classList.remove('hidden');
+  phaseText.textContent = 'Starting workflow...';
+  detailText.textContent = '';
+  buildPipeline();
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel_query: query, interests: interestsVal, max_videos: parseInt(slider.value) || 10 }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { workflow_id } = await res.json();
+    pollStatus(workflow_id);
+  } catch (err) {
+    showError(err.message);
+  }
+});
+
+async function pollStatus(wfId) {
+  let pollCount = 0;
+  const poll = setInterval(async () => {
+    pollCount++;
+    if (pollCount > MAX_POLLS) {
+      clearInterval(poll);
+      showError('Analysis timed out. Please check the Temporal UI for workflow status.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/status/${wfId}`);
+      if (!res.ok) throw new Error(await res.text());
+      const { phase, detail } = await res.json();
+
+      const phaseLabel = PHASES.find(p => p.key === phase)?.label || phase;
+      phaseText.textContent = phaseLabel + '...';
+      detailText.textContent = detail;
+      updatePipeline(phase);
+
+      if (phase === 'completed') {
+        clearInterval(poll);
+        await fetchResult(wfId);
+      }
+    } catch (err) {
+      clearInterval(poll);
+      showError(err.message);
+    }
+  }, 1500);
+}
+
+async function fetchResult(wfId) {
+  try {
+    const res = await fetch(`/api/result/${wfId}`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderResults(data);
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function renderResults(data) {
+  progress.classList.add('hidden');
+  skeleton.classList.add('hidden');
+  results.classList.remove('hidden');
+  btn.disabled = false;
+  btn.textContent = 'Analyze Channel';
+
+  // Force re-trigger animations
+  results.querySelectorAll('.animate-fade-in-up').forEach(el => {
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+  });
+
+  const reqCount = parseInt(slider.value) || 10;
+  summary.innerHTML = `
+    <div class="flex items-center gap-2 flex-wrap mb-2">
+      <h3 class="text-base font-bold text-slate-100">${data.channel_name || 'Channel'}</h3>
+      <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-500/20 text-red-300 border border-red-500/30">${data.video_count} videos scanned</span>
+      ${data.video_count !== reqCount ? `<span class="px-2 py-0.5 text-xs rounded-full bg-white/5 text-slate-500 border border-white/10">${reqCount} requested</span>` : ''}
+    </div>
+    <p class="text-slate-400 text-sm leading-relaxed">${data.summary}</p>
+    ${data.tone ? `<span class="inline-block mt-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-gradient-to-r from-red-500/20 to-rose-500/20 text-red-300 border border-red-500/20 capitalize">${data.tone}</span>` : ''}`;
+
+  const ki = data.key_insights || [];
+  if (ki.length) {
+    insightsWrapper.classList.remove('hidden');
+    insights.innerHTML = `
+      <h3 class="text-xs uppercase tracking-wider text-amber-400 font-semibold mb-2">Key Insights</h3>
+      <ol class="space-y-1.5">
+        ${ki.map((item, i) => `
+          <li class="flex gap-2 text-sm">
+            <span class="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 text-xs font-bold flex items-center justify-center border border-amber-500/20">${i + 1}</span>
+            <span class="text-slate-400 text-xs leading-relaxed">${item}</span>
+          </li>
+        `).join('')}
+      </ol>`;
+  } else {
+    insightsWrapper.classList.add('hidden');
+  }
+
+  cards.innerHTML = '';
+  (data.recommendations || []).forEach((r, i) => {
+    const videoId = extractVideoId(r.url);
+    const thumb = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
+    const scoreColor = r.score >= 70 ? 'from-red-500 to-rose-500' : r.score >= 40 ? 'from-amber-500 to-orange-500' : 'from-slate-500 to-slate-600';
+    const card = document.createElement('a');
+    card.href = r.url;
+    card.target = '_blank';
+    card.className = 'group bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden hover:scale-[1.02] hover:shadow-lg hover:shadow-red-500/10 transition-all duration-300 block animate-fade-in-up';
+    card.style.animationDelay = `${0.25 + i * 0.06}s`;
+    card.innerHTML = `
+      ${thumb ? `
+      <div class="relative">
+        <img src="${thumb}" alt="" class="w-full aspect-video object-cover" loading="lazy">
+        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30">
+          <svg class="w-12 h-12 text-white drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <span class="absolute bottom-2 left-2 px-2 py-0.5 text-xs font-medium rounded-lg bg-black/70 text-slate-200 backdrop-blur-sm">${r.duration}</span>
+      </div>` : ''}
+      <div class="p-3">
+        <h4 class="text-sm font-semibold text-slate-200 group-hover:text-red-300 transition-colors line-clamp-2 leading-snug">${r.title}</h4>
+        <p class="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">${r.why}</p>
+        <div class="mt-2">
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-slate-500">relevance</span>
+            <span class="font-bold text-slate-300">${r.score}<span class="text-slate-600">/100</span></span>
+          </div>
+          <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full bg-gradient-to-r ${scoreColor}" style="width: ${r.score}%"></div>
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-2 text-xs text-slate-600">
+          <span>${formatViews(r.views)} views</span>
+          ${!thumb ? `<span>${r.duration}</span>` : ''}
+        </div>
+      </div>`;
+    cards.appendChild(card);
+  });
+}
+
+function showError(msg) {
+  progress.classList.add('hidden');
+  skeleton.classList.add('hidden');
+  errorEl.classList.remove('hidden');
+  errorEl.textContent = msg;
+  btn.disabled = false;
+  btn.textContent = 'Analyze Channel';
+}
+
+function formatViews(n) { return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n); }
+</script>
+</body>
+</html>
