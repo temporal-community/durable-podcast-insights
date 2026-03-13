@@ -1,8 +1,12 @@
-# Podcast Insights Agent
+# Durable Podcast Insights
 
 A durable AI pipeline that analyzes YouTube podcast channels and delivers personalized video recommendations based on your interests.
 
 Built with **Temporal** for reliability, **Gemini** for intelligence, and **FastAPI** for a beautiful developer experience.
+
+<p align="center">
+  <img src="images/home.png" alt="Durable Podcast Insights UI" width="800">
+</p>
 
 ---
 
@@ -15,6 +19,22 @@ Built with **Temporal** for reliability, **Gemini** for intelligence, and **Fast
 5. You get scored recommendations, key insights, and content tone analysis
 
 Each step runs as a Temporal activity — if anything fails, it retries automatically. No data is lost.
+
+### Results
+
+AI-generated channel summary, key insights, and top video recommendations — all scored and explained.
+
+<p align="center">
+  <img src="images/results.png" alt="Analysis results with recommendations and insights" width="800">
+</p>
+
+### Durable Execution
+
+Every activity is visible in the Temporal UI — search, parse, rank, and summarize run as durable steps with full observability.
+
+<p align="center">
+  <img src="images/durable_execution.png" alt="Temporal workflow execution timeline" width="800">
+</p>
 
 ---
 
@@ -45,8 +65,8 @@ Each step runs as a Temporal activity — if anything fails, it retries automati
 ### 1. Clone and install
 
 ```
-git clone git@github.com:LondheShubham153/podcast-insights.git
-cd podcast-insights
+git clone git@github.com:temporal-community/durable-podcast-insights.git
+cd durable-podcast-insights
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
@@ -116,7 +136,7 @@ Rank and Summarize run **in parallel** for speed.
 ## Project Structure
 
 ```
-podcast-insights/
+durable-podcast-insights/
   activities/       Temporal activities (YouTube scraper, Gemini analyzer)
   app/              FastAPI application (routes, config, lifespan)
   models/           Pydantic schemas for API and workflow data

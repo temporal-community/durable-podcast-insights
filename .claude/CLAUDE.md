@@ -1,4 +1,4 @@
-# Podcast Insights — Claude Code Project Instructions
+# Durable Podcast Insights — Claude Code Project Instructions
 
 ## Identity
 You are a senior software engineer expert in **Python, Temporal, FastAPI, and Google Gemini**.
@@ -111,3 +111,48 @@ python run.py
 - Keep files under 150 lines
 - f-strings only
 - No unnecessary comments
+
+## Current Architecture (as of latest commit)
+
+### Multi-Provider Support
+The app supports **YouTube** (working) and **Spotify** (code ready, requires Premium).
+- Provider dispatch: `workflows/insights.py` uses `if input.provider == "spotify"` to pick `search_spotify` vs `search_youtube`
+- Downstream pipeline is provider-agnostic — works on `VideoMetadata` regardless of source
+- UI adapts per provider: labels, placeholders, accent colors (red/emerald), card rendering
+
+### File Map
+```
+models/schemas.py        — All dataclasses + Pydantic models (WorkflowInput has `provider` field)
+activities/scraper.py    — search_youtube (YouTube Data API v3, httpx)
+activities/spotify.py    — search_spotify (Spotify Web API, httpx, Client Credentials auth)
+activities/analyzer.py   — extract_interests, rank_videos, generate_summary (Gemini LLM)
+workflows/insights.py    — PodcastInsightsWorkflow (orchestrates search → parse → rank+summarize)
+worker.py                — Registers all activities + workflow
+app/config.py            — Settings via pydantic-settings (.env file)
+app/routes.py            — FastAPI routes: POST /api/analyze, GET /api/status, GET /api/result
+app/main.py              — FastAPI app with Temporal lifespan
+static/index.html        — Single-file UI (Tailwind CDN, provider toggle, brand logos)
+run.py                   — Uvicorn entrypoint
+```
+
+### Key Design Decisions
+- **No new dependencies for Spotify** — uses httpx (already in stack) + base64 (stdlib)
+- **Brand logos** via Simple Icons CDN (`cdn.simpleicons.org`) — same network dependency pattern as Tailwind CDN
+- **Tailwind dynamic classes** — must use full static class names, NOT string interpolation (`bg-${color}-500` breaks CDN JIT)
+- **Spotify API requires Premium** (policy change ~2025) — code is ready, just needs Premium credentials
+- **Podcast Index API** is the best free alternative if Spotify is dropped
+
+### Env Vars
+```
+GEMINI_API_KEY          — required
+YOUTUBE_API_KEY         — required
+GEMINI_MODEL            — default: gemini-2.5-flash
+TEMPORAL_HOST           — default: localhost:7233
+TASK_QUEUE              — default: podcast-insights
+SPOTIFY_CLIENT_ID       — optional (empty = Spotify disabled)
+SPOTIFY_CLIENT_SECRET   — optional (empty = Spotify disabled)
+```
+
+### Repository
+- **GitHub**: `temporal-community/durable-podcast-insights`
+- **Local**: `/Users/shubhamlondhe/Documents/work/temporal/projects/durable-podcast-insights`
